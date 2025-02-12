@@ -1,29 +1,35 @@
 const { dbConnection } = require('../config/db');
+// const checkRole = require('../utils/checkRole');
 
 
 const createBlog = async (req, res) => {
-    if (req.user.role !== 'Agent') {
-        return res.status(403).json({
-            status: "Error",
-            message: "You are not authorized to create a blog."
-        });
-    }
+    // if (req.user.role !== 'Agent') {
+    //     return res.status(403).json({
+    //         status: "Error",
+    //         message: "You are not authorized to create a blog."
+    //     });
+    // }
 
-    const { title, content, category_id } = req.body; 
+    const { title, content, category_id } = req.body;
     const userId = req.user.id; //  ID from JWT
 
-    console.log("Creating Blog with Author ID:", userId);  
+    console.log("Creating Blog with Author ID:", userId);
 
     const imgPath = req.files.map(file => file.filename);
     const imgPathString = JSON.stringify(imgPath);
 
     try {
         const query = "INSERT INTO blogs (title, content, category_id, author_id, images) VALUES (?, ?, ?, ?, ?)";
-        await dbConnection.query(query, [title, content, category_id, userId, imgPathString]);
+        const [result] = await dbConnection.query(query, [title, content, category_id, userId, imgPathString]);
+
+        const blogId = result.insertId;
+        const fetchQuery = `SELECT * FROM blogs WHERE id = ?`;
+        const [data] = await dbConnection.query(fetchQuery, [blogId])
 
         return res.status(201).json({
             status: "Success",
-            message: "Blog created successfully."
+            message: "Blog created successfully.",
+            data: data[0]
         });
     } catch (error) {
         console.error("Blog Creation Error:", error);
@@ -38,12 +44,14 @@ const createBlog = async (req, res) => {
 
 
 const getBlogByCategory = async (req, res) => {
-    const { category_id } = req.query;  
+    const { category_id } = req.query;
     console.log("Fetching blogs for category:", category_id);
 
-    
     if (!category_id || isNaN(category_id)) {
-        return res.status(400).json({ status: "Error", message: "Invalid category_id" });
+        return res.status(400).json({
+            status: "Error",
+            message: "Invalid category_id"
+        });
     }
 
     try {
@@ -54,14 +62,17 @@ const getBlogByCategory = async (req, res) => {
             WHERE blogs.category_id = ?
         `;
         const [blogs] = await dbConnection.query(query, [parseInt(category_id)]);
-        
+
         return res.status(200).json({
             status: "Success",
             data: blogs,
         });
     } catch (error) {
         console.error("Error fetching blogs:", error);
-        return res.status(500).json({ status: "Error", message: "Failed to get blogs." });
+        return res.status(500).json({
+            status: "Error",
+            message: "Failed to get blogs."
+        });
     }
 };
 
@@ -77,13 +88,16 @@ const updateBlog = async (req, res) => {
     }
 
     try {
-        
+        // Fetch blog before update
         const [blog] = await dbConnection.query("SELECT * FROM blogs WHERE id = ?", [id]);
         if (blog.length === 0) {
-            return res.status(404).json({ status: "Error", message: "Blog not found." });
+            return res.status(404).json({
+                status: "Error",
+                message: "Blog not found."
+            });
         }
 
-        // Handleling image updates
+        // Handling image updates
         let imgPath = blog[0].images || '[]'; // Default
         if (req.files && req.files.length > 0) {
             const newImg = req.files.map(file => file.filename);
@@ -94,12 +108,12 @@ const updateBlog = async (req, res) => {
         let params = [title, content, imgPath, id];
 
         if (category_id !== undefined) {
-
+            // Validate category_id
             const [category] = await dbConnection.query("SELECT * FROM categories WHERE id = ?", [category_id]);
             if (category.length === 0) {
                 return res.status(400).json({
                     status: "Error",
-                    message: "Invalid category_id. Category does not exist."
+                    message: "Invalid category_id, Category does not exist."
                 });
             }
 
@@ -111,10 +125,21 @@ const updateBlog = async (req, res) => {
         const [result] = await dbConnection.query(query, params);
 
         if (result.affectedRows === 0) {
-            return res.status(500).json({ status: "Error", message: "Update failed, no rows affected." });
+            return res.status(500).json({
+                status: "Error",
+                message: "Update failed, no rows affected."
+            });
         }
 
-        return res.status(200).json({ status: "Success", message: "Blog updated successfully." });
+        // ✅ Fetch updated blog using correct ID
+        const [updatedBlog] = await dbConnection.query("SELECT * FROM blogs WHERE id = ?", [id]);
+
+        return res.status(200).json({
+            status: "Success",
+            message: "Blog updated successfully.",
+            updatedBlog: updatedBlog[0] // ✅ Return updated blog
+        });
+
     } catch (error) {
         console.error("Update Error:", error);
         return res.status(500).json({
@@ -126,34 +151,40 @@ const updateBlog = async (req, res) => {
 };
 
 
-
-
-
 const deleteBlog = async (req, res) => {
     const { id } = req.params;
 
-    if (req.user.role !== "Agent") {
-        return res.status(403).json({
-            status: "Error",
-            message: "You are not authorized to delete this blog."
-        });
-    }
+    // if (req.user.role !== "Agent") {
+    //     return res.status(403).json({
+    //         status: "Error",
+    //         message: "You are not authorized to delete this blog."
+    //     });
+    // }
 
     try {
 
         const [blog] = await dbConnection.query("SELECT * FROM blogs WHERE id = ?", [id]);
         if (blog.length === 0) {
-            return res.status(404).json({ status: "Error", message: "Blog not found." });
+            return res.status(404).json({
+                status: "Error",
+                message: "Blog not found."
+            });
         }
 
 
         const [result] = await dbConnection.query("DELETE FROM blogs WHERE id = ?", [id]);
 
         if (result.affectedRows === 0) {
-            return res.status(500).json({ status: "Error", message: "Failed to delete blog." });
+            return res.status(500).json({
+                status: "Error",
+                message: "Failed to delete blog."
+            });
         }
 
-        return res.status(200).json({ status: "Success", message: "Blog deleted successfully." });
+        return res.status(200).json({
+            status: "Success",
+            message: "Blog deleted successfully."
+        });
     } catch (error) {
         console.error("Delete Error:", error);
         return res.status(500).json({
@@ -166,27 +197,30 @@ const deleteBlog = async (req, res) => {
 
 const getAllBlogs = async (req, res) => {
     // const { category_id } = req.query;
-    
+
 
     const query = `SELECT * FROM blogs`;
 
     try {
         const [blogs] = await dbConnection.query(query);
-        res.status(200).json({ status: "Success", data: blogs });
+        res.status(200).json({
+            status: "Success",
+            data: blogs
+        });
     } catch (error) {
-        res.status(500).json({ status: "Error", message: "Failed to fetch blogs by category." });
+        res.status(500).json({
+            status: "Error",
+            message: "Failed to fetch blogs by category."
+        });
     }
 };
 
 
 
-
-
-
-module.exports = { 
-    createBlog, 
-    getBlogByCategory, 
-    updateBlog, 
+module.exports = {
+    createBlog,
+    getBlogByCategory,
+    updateBlog,
     deleteBlog,
     getAllBlogs
 };

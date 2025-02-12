@@ -1,11 +1,13 @@
 const mysql = require('mysql2');
+const { HOST, USER, PASSWORD, DATABASE, PORT } = require('./config');
+
 
 const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'rakesh',
-    password: 'root',
-    database: 'bms',
-    port: 3306,
+    host: HOST,
+    user: USER,
+    password: PASSWORD,
+    database: DATABASE, // blog management system
+    port: PORT,
 });
 
 // Convert pool to use Promises
